@@ -1,13 +1,28 @@
 # Dependencies
 node_modules/
+**/node_modules/
 
 # Build output
 dist/
+**/dist/
+.next/
+**/.next/
 
-# Environment
+# Python
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyc
 .env
 .env.local
 .env.production
+*.egg-info/
+**/*.egg-info/
+.mypy_cache/
+.pytest_cache/
+*.egg
 
 # OS
 .DS_Store
@@ -25,3 +40,5 @@ npm-debug.log*
 
 # Misc
 *.tsbuildinfo
+build/
+*.pyc
