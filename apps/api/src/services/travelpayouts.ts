@@ -4,7 +4,6 @@ import {
   TPAirport,
   TPAirline,
   TPCity,
-  TPPriceCheap,
   FlightOption,
   NearestAirport,
 } from '../types/index.js';
@@ -18,7 +17,7 @@ import {
 
 const TP_BASE = 'https://api.travelpayouts.com';
 const TOKEN = process.env.TRAVELPAYOUTS_TOKEN ?? '';
-const LANG = 'zh';
+const LANG = 'zh-TW';
 const USD = 'USD';
 
 const AIRLINES = ['Eva Air', 'China Airlines', 'Japan Airlines', 'Peach Aviation', 'StarFlyer'];
@@ -57,7 +56,8 @@ function createClient(): AxiosInstance {
   const client = axios.create({ baseURL: TP_BASE });
   client.interceptors.request.use((config) => {
     if (TOKEN) {
-      config.params = { ...config.params, token: TOKEN };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (config.headers as any)['X-Access-Token'] = TOKEN;
     }
     return config;
   });
@@ -124,6 +124,24 @@ function estimateArrival(departDate: string, stops: number): string {
   ).toISOString();
 }
 
+// TP Data API v1 response shape:
+// { success: true, data: { DEST_IATA: { "0": { price, airline, flight_number, transfers, departure_at, ... } } }, currency: "usd" }
+interface TPDataResponse {
+  success: boolean;
+  data: Record<string, Record<string, {
+    price: number;
+    airline: string;
+    flight_number?: number;
+    transfers: number;
+    departure_at: string;
+    return_at?: string;
+    duration_to?: number;
+    duration_back?: number;
+    expires_at?: string;
+  }>>;
+  currency: string;
+}
+
 export async function searchCheapFlights(
   origin: string,
   destination: string,
@@ -135,12 +153,12 @@ export async function searchCheapFlights(
     if (parsed._cachedResult) return parsed._cachedResult as FlightOption[];
   }
 
-  let data: { proposals: TPPriceCheap[] };
+  let tpData: TPDataResponse;
   try {
-    const res = await http.get<{ proposals: TPPriceCheap[] }>('/v1/prices/cheap', {
-      params: { origin, destination, depart_date: departDate, currency: USD, page: 1, limit: 30 },
+    const res = await http.get<TPDataResponse>('/v1/prices/cheap', {
+      params: { origin, destination, depart_date: departDate.slice(0, 7), currency: USD, page: 1, limit: 30 },
     });
-    data = res.data;
+    tpData = res.data;
   } catch (err) {
     // TP API unreachable — return mock data for development
     console.warn(`[TP] API unreachable (${err instanceof Error ? err.message : err}), returning mock data`);
@@ -149,32 +167,44 @@ export async function searchCheapFlights(
     return mock;
   }
 
+  if (!tpData.success) {
+    const mock = buildMockFlights(origin, destination, departDate);
+    await setCachedFlightSearch(origin, destination, departDate, { _cachedResult: mock });
+    return mock;
+  }
+
   const airlines = await getAirlines();
+  const results: FlightOption[] = [];
 
-  const results: FlightOption[] = (data.proposals ?? []).map((p: TPPriceCheap) => {
-    const code = p.airline ?? '';
-    const departure = new Date(departDate).toISOString();
-    const stops = p.number_of_changes;
+  // TP response: data[destination_iata][index] = flight
+  for (const [destIata, flightsByIndex] of Object.entries(tpData.data)) {
+    for (const flight of Object.values(flightsByIndex)) {
+      const code = flight.airline ?? '';
+      const stops = flight.transfers ?? 0;
+      const departure = flight.departure_at ? new Date(flight.departure_at).toISOString() : new Date(departDate).toISOString();
+      const durationMin = flight.duration_to ?? (90 + stops * 90);
 
-    return {
-      price: p.price,
-      currency: USD,
-      airline: airlineName(code, airlines),
-      flightNumber: p.flight_number ?? `${code} ${String(Math.floor(Math.random() * 9000) + 1000)}`,
-      departure,
-      arrival: estimateArrival(departDate, stops),
-      duration: 90 + stops * 90,
-      stops,
-      origin: p.origin,
-      destination: p.destination,
-      affiliateUrl: buildAffiliateUrl(
-        `https://www.aviasales.ru/search?origin_iata=${origin}&destination_iata=${destination}&depart_date=${departDate}`
-      ),
-    };
-  });
+      results.push({
+        price: flight.price,
+        currency: USD,
+        airline: airlineName(code, airlines),
+        flightNumber: flight.flight_number ? String(flight.flight_number) : `${code} ${String(Math.floor(Math.random() * 9000) + 1000)}`,
+        departure,
+        arrival: flight.duration_to
+          ? new Date(new Date(flight.departure_at).getTime() + flight.duration_to * 60 * 1000).toISOString()
+          : estimateArrival(departDate, stops),
+        duration: durationMin,
+        stops,
+        origin,
+        destination: destIata,
+        affiliateUrl: buildAffiliateUrl(
+          `https://www.aviasales.ru/search?origin_iata=${origin}&destination_iata=${destIata}&depart_date=${departDate.slice(0, 7)}`
+        ),
+      });
+    }
+  }
 
   await setCachedFlightSearch(origin, destination, departDate, { _cachedResult: results });
-
   return results;
 }
 

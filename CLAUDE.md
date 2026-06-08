@@ -29,9 +29,8 @@ flightplus/
 
 - Phase 0（架構立項）：完成
 - Phase 1（網站 MVP）：✅ Fastify API 完成（需 TP API 連線驗證）
-- Phase 2（策略引擎）：待開發
-- Phase 3（APP）：待開發
-- Phase 4（全球門票）：待開發
+- Phase 1（前端）：✅ Next.js 首頁 + 搜尋結果頁（build clean）
+- Phase 1（Worker）：✅ FastAPI skeleton 完成（Phase 2 串真實 API）
 
 ## 合作模式
 

@@ -52,19 +52,32 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <main className="max-w-7xl mx-auto px-4 py-12">
-        <div className="text-center mb-10">
-          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-            找到最優惠的機票
-          </h2>
-          <p className="text-lg text-gray-600">
-            比較全球航空公司，智慧轉機策略，讓您省更多
-          </p>
-        </div>
+      {/* ── Hero Section (p5.js 動畫背景) ───────────────────────── */}
+      <section className="relative w-full overflow-hidden" style={{ height: "calc(100vh - 73px)" }}>
+        {/* p5.js 動畫背景（iframe absolutely positioned） */}
+        <iframe
+          src="/flightplus-hero.html"
+          title="FlightPlus Hero Animation"
+          className="absolute inset-0 w-full h-full"
+          style={{ border: "none", pointerEvents: "none" }}
+          allow="accelerometer; autoplay"
+          loading="eager"
+        />
 
-        {/* Search Box */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 max-w-4xl mx-auto">
+        {/* 半透明遮罩 + 搜尋框（絕對定位於動畫之上） */}
+        <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
+          {/* 頂部標題文字 */}
+          <div className="text-center mb-8 drop-shadow-lg">
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+              找到最優惠的機票
+            </h2>
+            <p className="text-lg text-white/90">
+              比較全球航空公司，智慧轉機策略，讓您省更多
+            </p>
+          </div>
+
+          {/* 搜尋框（玻璃質感卡片） */}
+          <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-4xl">
           {/* Trip Type Toggle */}
           <div className="flex gap-4 mb-6">
             <button
@@ -233,7 +246,8 @@ export default function HomePage() {
             ))}
           </div>
         </div>
-      </main>
+        </div>
+      </section>
 
       {/* Footer */}
       <footer className="mt-16 border-t border-gray-200 bg-white">
