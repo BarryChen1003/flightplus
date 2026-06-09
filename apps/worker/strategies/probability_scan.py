@@ -5,24 +5,26 @@
 2. 抓 month-matrix（整個月的每日票價）
 3. 計算：均值、標準差、最低價日期、最高價日期
 4. 輸出「性價比最高的 5 天」
-
-Phase 1: Mock fallback 回應
-Phase 2: 替換真實 API 呼叫
 """
 
 import logging
 import math
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from models.types import AnalyzeRequest, ProbabilityScanResult
+from models.types import AnalyzeRequest
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/analyze", tags=["strategy-2-probability-scan"])
+
+# TP API Configuration
+TP_API_BASE = "https://api.travelpayouts.com/v2"
+TP_ACCESS_TOKEN = "97f12cfdf096ca91f1e1ea7a9b8111e2"
 
 
 # ============================================================================
@@ -53,12 +55,94 @@ class ProbabilityScanResponse(BaseModel):
 
 
 # ============================================================================
-# Mock Data (Phase 1)
+# TP API Client (Real API Calls)
 # ============================================================================
 
 
+async def _fetch_month_matrix(
+    origin: str,
+    destination: str,
+    month: str,
+    currency: str = "USD",
+) -> list[DayPriceResponse]:
+    """呼叫 TP v2 month-matrix API 取得每日票價
+
+    Args:
+        origin: 起點 IATA 碼 (如 TPE)
+        destination: 目的地 IATA 碼 (如 NRT)
+        month: 月份 (YYYY-MM)
+        currency: 幣別 (預設 USD)
+
+    Returns:
+        每日票價列表
+
+    Raises:
+        HTTPException: API 呼叫失敗時
+    """
+    url = f"{TP_API_BASE}/prices/month-matrix"
+
+    params = {
+        "currency": currency.lower(),
+        "origin": origin.upper(),
+        "destination": destination.upper(),
+        "month": month,
+    }
+
+    headers = {
+        "X-Access-Token": TP_ACCESS_TOKEN,
+    }
+
+    logger.info(f"[TP API] Calling month-matrix: {origin} -> {destination} for {month}")
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        logger.info(f"[TP API] Received {len(data)} price entries")
+
+        # 轉換 API 回應為 DayPriceResponse 列表
+        daily_prices: list[DayPriceResponse] = []
+        for entry in data:
+            # TP month-matrix 回應格式: {"date": "2026-08-01", "price": 123, ...}
+            day_price = DayPriceResponse(
+                date=entry.get("date", ""),
+                price=float(entry.get("price", 0)),
+                currency=currency.upper(),
+            )
+            daily_prices.append(day_price)
+
+        # 按日期排序
+        daily_prices.sort(key=lambda x: x.date)
+
+        return daily_prices
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[TP API] HTTP error: {e.response.status_code} - {e.response.text}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Travelpayouts API error: {e.response.status_code}",
+        )
+    except httpx.RequestError as e:
+        logger.error(f"[TP API] Request error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to connect to Travelpayouts API: {str(e)}",
+        )
+    except (ValueError, KeyError) as e:
+        logger.error(f"[TP API] Parse error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Invalid API response format: {str(e)}",
+        )
+
+
 def _generate_mock_prices(month: str, origin: str, destination: str) -> list[DayPriceResponse]:
-    """產生一個月的 mock 票價資料"""
+    """產生一個月的 mock 票價資料 (fallback only)
+
+    Deprecated: 已改用真實 API，此函式僅保留作為 fallback
+    """
     daily_prices = []
 
     # 解析月份
@@ -175,11 +259,20 @@ async def analyze_probability(request: AnalyzeRequest) -> ProbabilityScanRespons
             detail="Month is required (format: YYYY-MM)",
         )
 
-    # Phase 1: Mock 資料
-    # Phase 2: 呼叫 Travelpayouts month-matrix API
-    daily_prices = _generate_mock_prices(
-        request.month, request.origin.upper(), request.destination.upper()
+    # Phase 2: 呼叫 Travelpayouts month-matrix API (真實 API)
+    daily_prices = await _fetch_month_matrix(
+        request.origin.upper(),
+        request.destination.upper(),
+        request.month,
     )
+
+    # 如果 API 回傳空資料，使用 mock fallback
+    if not daily_prices:
+        logger.warning("[Strategy-2] API returned empty, using mock fallback")
+        daily_prices = _generate_mock_prices(
+            request.month, request.origin.upper(), request.destination.upper()
+        )
+
     analysis = _analyze_prices(daily_prices)
 
     # 建立推薦文字
