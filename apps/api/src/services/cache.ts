@@ -1,5 +1,6 @@
-// In-memory cache (Phase 1)
-// Redis support will be added in Phase 2 via Upstash
+// In-memory cache (Phase 1) + Upstash Redis (Phase 2)
+// When UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set, uses Upstash
+// Otherwise falls back to in-memory cache (development)
 
 export const TTL = {
   FLIGHT_SEARCH: 15 * 60,
@@ -7,6 +8,8 @@ export const TTL = {
   STATIC_DATA: 24 * 60 * 60,
   HOTEL_SEARCH: 30 * 60,
 } as const;
+
+// ── In-Memory Fallback ──────────────────────────────────────────────────────
 
 const memCache = new Map<string, { value: string; expiry: number }>();
 
@@ -24,13 +27,60 @@ function memSet(key: string, value: string, ttl: number): void {
   memCache.set(key, { value, expiry: Date.now() + ttl * 1000 });
 }
 
+// ── Upstash Redis Client (lazy async init) ──────────────────────────────────
+
+type UpstashRedis = import('@upstash/redis').Redis;
+let redisClient: UpstashRedis | null = null;
+
+async function getRedis(): Promise<UpstashRedis | null> {
+  if (redisClient) return redisClient;
+
+  const restUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const restToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (!restUrl || !restToken) {
+    return null;
+  }
+
+  try {
+    // Dynamic import so build doesn't fail when package is not installed yet
+    const { Redis } = await import('@upstash/redis');
+    redisClient = new Redis({ url: restUrl, token: restToken });
+    return redisClient;
+  } catch {
+    return null;
+  }
+}
+
+// ── Cache Operations ─────────────────────────────────────────────────────────
+
 async function cacheGet(key: string): Promise<string | null> {
+  const client = await getRedis();
+  if (client) {
+    try {
+      const val = await client.get<string>(key);
+      return val ?? null;
+    } catch (e) {
+      console.warn('[cache] Redis GET failed, falling back to memory:', e);
+    }
+  }
   return memGet(key);
 }
 
 async function cacheSet(key: string, value: string, ttl: number): Promise<void> {
+  const client = await getRedis();
+  if (client) {
+    try {
+      await client.set(key, value, { ex: ttl });
+      return;
+    } catch (e) {
+      console.warn('[cache] Redis SET failed, falling back to memory:', e);
+    }
+  }
   memSet(key, value, ttl);
 }
+
+// ── Key Builders ─────────────────────────────────────────────────────────────
 
 export function buildFlightKey(origin: string, destination: string, date: string): string {
   return `flight:${origin}:${destination}:${date}`;
@@ -40,9 +90,20 @@ export function buildStaticDataKey(type: string, lang: string): string {
   return `static:${type}:${lang}`;
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 export function initCache(_redisUrl?: string): void {
-  console.log('[Cache] Phase 1 — in-memory cache active (Redis in Phase 2)');
+  const hasUpstash = !!(
+    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+  );
+  console.log(
+    hasUpstash
+      ? '[Cache] Phase 2 — Upstash Redis connected'
+      : '[Cache] Phase 1 — in-memory cache active (Upstash in Phase 2)'
+  );
 }
+
+// ── High-Level API ───────────────────────────────────────────────────────────
 
 export async function getCachedFlightSearch(
   origin: string,
@@ -74,7 +135,10 @@ export async function setCachedFlightSearch(
   await cacheSet(key, JSON.stringify(withTimestamp), TTL.FLIGHT_SEARCH);
 }
 
-export async function getCachedStaticData(type: string, lang = 'zh'): Promise<string | null> {
+export async function getCachedStaticData(
+  type: string,
+  lang = 'zh'
+): Promise<string | null> {
   const key = buildStaticDataKey(type, lang);
   return cacheGet(key);
 }
