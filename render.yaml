@@ -27,7 +27,6 @@ services:
         sync: false
       - key: TP_MARKER
         sync: false
-      # ── CORS：稍後加入 Vercel 網址 ─────────────────────────────────
+      # ── CORS：加入 Vercel 前端 ─────────────────────────────────
       - key: ALLOWED_ORIGINS
-        value: http://localhost:3000
-        # 部署 Vercel 後需要更新成：https://flightplus.vercel.app,https://flightplus-git-*.vercel.app
+        value: http://localhost:3000,http://localhost:3001,https://flightplus-web.vercel.app,https://*.vercel.app
