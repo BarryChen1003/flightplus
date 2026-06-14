@@ -15,6 +15,7 @@ const flightSearchSchema = z.object({
 
 const nearestAirportSchema = z.object({
   origin: z.string().length(3).toUpperCase(),
+  destination: z.string().length(3).toUpperCase(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   passengers: z.coerce.number().int().min(1).max(9).optional().default(1),
 });
@@ -59,7 +60,7 @@ export async function flightsRoutes(app: FastifyInstance): Promise<void> {
     const q = parsed.data as NearestAirportQuery;
 
     try {
-      const airports = await getNearestPlacesMatrix(q.origin, 'NRT', q.date);
+      const airports = await getNearestPlacesMatrix(q.origin, q.destination, q.date);
       const response: NearestAirportResponse = {
         origin: q.origin,
         date: q.date,

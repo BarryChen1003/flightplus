@@ -52,6 +52,7 @@ export interface HotelSearchQuery {
 
 export interface NearestAirportQuery {
   origin: string;        // IATA
+  destination: string;   // IATA
   date: string;          // YYYY-MM-DD
   passengers?: number;
 }

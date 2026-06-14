@@ -226,14 +226,16 @@ interface TPNearestPlace {
 
 export async function getNearestPlacesMatrix(
   origin: string,
-  _destination: string,
+  destination: string,
   date: string
 ): Promise<NearestAirport[]> {
   const { data } = await http.get<{ prices: TPNearestPlace[] }>('/v2/prices/nearest-places-matrix', {
     params: {
       origin,
-      depart_date: date,
+      destination,
       currency: USD,
+      period_type: 'month',
+      beginning_of_period: date,
     },
   });
 
