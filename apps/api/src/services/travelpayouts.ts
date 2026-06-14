@@ -297,15 +297,13 @@ export async function getNearestPlacesMatrix(
 interface TPCalendarResponse {
   success: boolean;
   data: Record<string, // transfer group: "0", "1", "2"
-    Record<string, { // date: "2026-08-01"
+    Array<{
       price: number;
       airline: string;
       flight_number?: string;
-      depart_date: string;
-      return_date?: string;
-      number_of_changes: number;
-      found_at: string;
-      updated_at?: string;
+      departure_at: string;
+      return_at?: string;
+      expires_at: string;
     }>
   >;
 }
@@ -318,7 +316,13 @@ export async function getCalendarPrices(
   let tpData: TPCalendarResponse;
   try {
     const res = await http.get<TPCalendarResponse>('/v1/prices/calendar', {
-      params: { origin, destination, month, currency: USD },
+      params: {
+        origin,
+        destination,
+        depart_date: month, // YYYY-MM format
+        calendar_type: 'departure_date',
+        currency: USD,
+      },
     });
     tpData = res.data;
   } catch (err) {
@@ -330,23 +334,25 @@ export async function getCalendarPrices(
     return { dates: [] };
   }
 
-  const dates: Array<{ date: string; price: number; airline: string; stops: number }> = [];
+  // Find cheapest flight per day across all transfer groups
+  const priceByDate = new Map<string, { date: string; price: number; airline: string; stops: number }>();
 
-  for (const [stopsStr, dayEntries] of Object.entries(tpData.data)) {
+  for (const [stopsStr, flights] of Object.entries(tpData.data)) {
     const stops = parseInt(stopsStr, 10);
-    for (const [date, entry] of Object.entries(dayEntries)) {
-      const existing = dates.find((d) => d.date === date);
-      if (!existing || entry.price < existing.price) {
-        if (existing) {
-          existing.price = entry.price;
-          existing.airline = entry.airline;
-          existing.stops = stops;
-        } else {
-          dates.push({ date, price: entry.price, airline: entry.airline, stops });
-        }
+    for (const flight of flights) {
+      // Extract date part from ISO datetime "2026-08-01T14:30:00Z"
+      const date = flight.departure_at.slice(0, 10);
+      const existing = priceByDate.get(date);
+      if (!existing || flight.price < existing.price) {
+        priceByDate.set(date, {
+          date,
+          price: flight.price,
+          airline: flight.airline,
+          stops,
+        });
       }
     }
   }
 
-  return { dates };
+  return { dates: Array.from(priceByDate.values()) };
 }
