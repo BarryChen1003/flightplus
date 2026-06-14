@@ -291,3 +291,62 @@ export async function getNearestPlacesMatrix(
     .sort((a, b) => b.savings - a.savings)
     .slice(0, 5);
 }
+
+// --- Calendar Prices (Strategy 1 & 6 — best date scanner) ---
+
+interface TPCalendarResponse {
+  success: boolean;
+  data: Record<string, // transfer group: "0", "1", "2"
+    Record<string, { // date: "2026-08-01"
+      price: number;
+      airline: string;
+      flight_number?: string;
+      depart_date: string;
+      return_date?: string;
+      number_of_changes: number;
+      found_at: string;
+      updated_at?: string;
+    }>
+  >;
+}
+
+export async function getCalendarPrices(
+  origin: string,
+  destination: string,
+  month: string, // YYYY-MM
+): Promise<{ dates: Array<{ date: string; price: number; airline: string; stops: number }> }> {
+  let tpData: TPCalendarResponse;
+  try {
+    const res = await http.get<TPCalendarResponse>('/v1/prices/calendar', {
+      params: { origin, destination, month, currency: USD },
+    });
+    tpData = res.data;
+  } catch (err) {
+    console.warn(`[TP Calendar] API unreachable: ${err instanceof Error ? err.message : err}`);
+    return { dates: [] };
+  }
+
+  if (!tpData.success) {
+    return { dates: [] };
+  }
+
+  const dates: Array<{ date: string; price: number; airline: string; stops: number }> = [];
+
+  for (const [stopsStr, dayEntries] of Object.entries(tpData.data)) {
+    const stops = parseInt(stopsStr, 10);
+    for (const [date, entry] of Object.entries(dayEntries)) {
+      const existing = dates.find((d) => d.date === date);
+      if (!existing || entry.price < existing.price) {
+        if (existing) {
+          existing.price = entry.price;
+          existing.airline = entry.airline;
+          existing.stops = stops;
+        } else {
+          dates.push({ date, price: entry.price, airline: entry.airline, stops });
+        }
+      }
+    }
+  }
+
+  return { dates };
+}

@@ -23,6 +23,30 @@ export interface NearestAirport {
   flights: FlightOption[];
 }
 
+export interface CalendarDay {
+  date: string;         // YYYY-MM-DD
+  price: number;        // USD
+  airline: string;
+  flights: number;      // number of transfer options
+  direct: boolean;     // true if 0 stops available
+}
+
+export interface BestDatesResponse {
+  origin: string;
+  destination: string;
+  month: string;        // YYYY-MM
+  dates: CalendarDay[];
+  cheapest: CalendarDay;
+  meta: {
+    daysAnalyzed: number;
+    avgPrice: number;
+    minPrice: number;
+    maxPrice: number;
+    savingsVsAvg: number; // percentage
+    directOnly: boolean;
+  };
+}
+
 export interface HotelOption {
   name: string;
   location: string;
