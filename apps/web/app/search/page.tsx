@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import AirportSelector from "../../components/AirportSelector";
 
 interface Flight {
   price: number;
@@ -56,17 +57,34 @@ const API = "https://flightplus-api.onrender.com";
 // ── Search Content ─────────────────────────────────────────
 function SearchResultsContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [flights, setFlights] = useState<Flight[]>([]);
   const [nearest, setNearest] = useState<NearestAirport[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"flights" | "calendar">("flights");
   const [sortBy, setSortBy] = useState<"price" | "duration">("price");
 
+  // Local form state (initialized from URL, updated on search bar changes)
+  const [formOrigin, setFormOrigin] = useState(
+    () => (searchParams.get("origin") || "TPE").toUpperCase()
+  );
+  const [formDestination, setFormDestination] = useState(
+    () => (searchParams.get("destination") || "NRT").toUpperCase()
+  );
+  const [formDepartDate, setFormDepartDate] = useState(
+    () => searchParams.get("departDate") || ""
+  );
+  const [formReturnDate, setFormReturnDate] = useState(
+    () => searchParams.get("returnDate") || ""
+  );
+  const [formPassengers, setFormPassengers] = useState(
+    () => parseInt(searchParams.get("passengers") || "1")
+  );
+
+  // For display purposes (from URL params)
   const origin = (searchParams.get("origin") || "TPE").toUpperCase();
   const destination = (searchParams.get("destination") || "NRT").toUpperCase();
   const departDate = searchParams.get("departDate") || "";
-  const returnDate = searchParams.get("returnDate") || "";
-  const passengers = searchParams.get("passengers") || "1";
 
   useEffect(() => {
     if (!departDate) return;
@@ -88,45 +106,115 @@ function SearchResultsContent() {
     });
   }, [origin, destination, departDate]);
 
+  // Re-init form state when URL params change (e.g., back/forward navigation)
+  useEffect(() => {
+    setFormOrigin((searchParams.get("origin") || "TPE").toUpperCase());
+    setFormDestination((searchParams.get("destination") || "NRT").toUpperCase());
+    setFormDepartDate(searchParams.get("departDate") || "");
+    setFormReturnDate(searchParams.get("returnDate") || "");
+    setFormPassengers(parseInt(searchParams.get("passengers") || "1"));
+  }, [searchParams]);
+
   const sorted = [...flights].sort((a, b) =>
     sortBy === "price" ? a.price - b.price : a.duration - b.duration
   );
 
   return (
     <>
-      {/* Search Summary Bar */}
-      <div style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: 12,
-        padding: "14px 20px",
-        marginBottom: 24,
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        gap: 16,
-        fontSize: 14,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>
-            {origin}
-          </span>
-          <span style={{ color: "var(--text-muted)" }}>→</span>
-          <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>
-            {destination}
-          </span>
+      {/* Modify Search Bar */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!origin || !destination || !departDate) return;
+          setLoading(true);
+          setFlights([]);
+          setNearest([]);
+          const params = new URLSearchParams({
+            origin: formOrigin,
+            destination: formDestination,
+            departDate: formDepartDate,
+            ...(formReturnDate ? { returnDate: formReturnDate } : {}),
+            passengers: formPassengers.toString(),
+          });
+          router.replace(`/search?${params.toString()}`);
+          fetch(`${API}/api/flights/search?${params}`)
+            .then((r) => r.json()).then((d) => setFlights(d.flights || [])).catch(() => {})
+            .finally(() => setLoading(false));
+          fetch(`${API}/api/flights/nearest-airports?origin=${formOrigin}&destination=${formDestination}&date=${formDepartDate}`)
+            .then((r) => r.json()).then((d) => setNearest(d.airports || [])).catch(() => {});
+        }}
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          borderRadius: 12,
+          padding: "14px 20px",
+          marginBottom: 24,
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 140px 1fr auto",
+          gap: 12,
+          alignItems: "end",
+        }}
+      >
+        <div>
+          <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>出發地</label>
+          <AirportSelector value={formOrigin} onChange={setFormOrigin} id="search-origin" />
         </div>
-        <div style={{ width: 1, height: 20, background: "var(--border)" }} />
-        <div style={{ color: "var(--text-secondary)" }}>
-          <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{departDate}</span>
-          {returnDate && <><span style={{ margin: "0 8px", color: "var(--text-muted)" }}>↔</span><span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{returnDate}</span></>}
+        <div>
+          <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>目的地</label>
+          <AirportSelector value={formDestination} onChange={setFormDestination} id="search-dest" />
         </div>
-        <div style={{ width: 1, height: 20, background: "var(--border)" }} />
-        <div style={{ color: "var(--text-secondary)" }}>{passengers} 人</div>
-        <div style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: 13 }}>
-          {loading ? "搜尋中..." : `找到 ${flights.length} 個航班`}
+        <div>
+          <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>出發日</label>
+          <input
+            type="date"
+            value={formDepartDate}
+            onChange={(e) => setFormDepartDate(e.target.value)}
+            min={new Date().toISOString().split("T")[0]}
+            style={{
+              width: "100%", padding: "10px 12px",
+              background: "var(--bg-secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              fontSize: 13, color: "var(--text-primary)",
+              fontFamily: "inherit",
+            }}
+          />
         </div>
-      </div>
+        <div>
+          <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>乘客人數</label>
+          <select
+            value={formPassengers}
+            onChange={(e) => setFormPassengers(Number(e.target.value))}
+            style={{
+              width: "100%", padding: "10px 12px",
+              background: "var(--bg-secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              fontSize: 13, color: "var(--text-primary)",
+              fontFamily: "inherit",
+            }}
+          >
+            {[1,2,3,4,5,6,7,8,9].map((n) => <option key={n} value={n}>{n}人</option>)}
+          </select>
+        </div>
+        <button
+          type="submit"
+          style={{
+            padding: "10px 20px",
+            background: "var(--accent)",
+            color: "var(--bg-primary)",
+            border: "none",
+            borderRadius: 10,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            whiteSpace: "nowrap",
+          }}
+        >
+          重新搜尋
+        </button>
+      </form>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, alignItems: "start" }}>
 
