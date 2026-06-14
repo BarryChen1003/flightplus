@@ -1,13 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
 interface Flight {
-  id: string;
   price: number;
   currency: string;
   airline: string;
@@ -26,91 +23,10 @@ interface NearestAirport {
   name: string;
   distance: number;
   savings: number;
+  flights: Flight[];
 }
 
-const MOCK_FLIGHTS: Flight[] = [
-  {
-    id: "1",
-    price: 4280,
-    currency: "TWD",
-    airline: "星宇航空",
-    flightNumber: "JX800",
-    departure: "2026-08-01T08:00:00Z",
-    arrival: "2026-08-01T12:30:00Z",
-    duration: 270,
-    stops: 0,
-    origin: "TPE",
-    destination: "NRT",
-    affiliateUrl: "#",
-  },
-  {
-    id: "2",
-    price: 3650,
-    currency: "TWD",
-    airline: "香草航空",
-    flightNumber: "JW876",
-    departure: "2026-08-01T14:15:00Z",
-    arrival: "2026-08-01T18:40:00Z",
-    duration: 265,
-    stops: 0,
-    origin: "TPE",
-    destination: "NRT",
-    affiliateUrl: "#",
-  },
-  {
-    id: "3",
-    price: 2999,
-    currency: "TWD",
-    airline: "長榮航空",
-    flightNumber: "BR184",
-    departure: "2026-08-01T09:30:00Z",
-    arrival: "2026-08-01T18:00:00Z",
-    duration: 510,
-    stops: 1,
-    origin: "TPE",
-    destination: "NRT",
-    affiliateUrl: "#",
-  },
-  {
-    id: "4",
-    price: 5100,
-    currency: "TWD",
-    airline: "中華航空",
-    flightNumber: "CI100",
-    departure: "2026-08-01T11:00:00Z",
-    arrival: "2026-08-01T15:20:00Z",
-    duration: 260,
-    stops: 0,
-    origin: "TPE",
-    destination: "NRT",
-    affiliateUrl: "#",
-  },
-];
-
-const MOCK_NEAREST: NearestAirport[] = [
-  { iata: "KIX", name: "關西國際機場", distance: 170, savings: 1200 },
-  { iata: "NGO", name: "中部國際機場", distance: 280, savings: 800 },
-];
-
-const MOCK_HUBS: { hub: string; name: string; savings: number }[] = [
-  { hub: "ICN", name: "首爾仁川機場", savings: 2100 },
-  { hub: "HKG", name: "香港國際機場", savings: 1500 },
-];
-
-const MOCK_CALENDAR: { date: string; price: number }[] = Array.from(
-  { length: 7 },
-  (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    return {
-      date: d.toISOString().split("T")[0],
-      price: Math.floor(3000 + Math.random() * 2500),
-    };
-  }
-);
-
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
+// ── Helpers ────────────────────────────────────────────────
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -119,276 +35,383 @@ function formatDuration(minutes: number): string {
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("zh-TW", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
+    hour: "2-digit", minute: "2-digit", timeZone: "UTC",
   });
 }
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("zh-TW", {
-    month: "short",
-    day: "numeric",
-    weekday: "short",
-    timeZone: "UTC",
+    month: "short", day: "numeric", weekday: "short", timeZone: "UTC",
   });
 }
 
+function formatPrice(price: number, currency: string): string {
+  if (currency === "USD") return `$${price.toLocaleString()}`;
+  return `NT$${price.toLocaleString()}`;
+}
+
+// ── API Base URL ───────────────────────────────────────────
+const API = "https://flightplus-api.onrender.com";
+
+// ── Search Content ─────────────────────────────────────────
 function SearchResultsContent() {
   const searchParams = useSearchParams();
+  const [flights, setFlights] = useState<Flight[]>([]);
+  const [nearest, setNearest] = useState<NearestAirport[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"flights" | "calendar">("flights");
+  const [sortBy, setSortBy] = useState<"price" | "duration">("price");
 
-  const origin = searchParams.get("origin") || "TPE";
-  const destination = searchParams.get("destination") || "NRT";
+  const origin = (searchParams.get("origin") || "TPE").toUpperCase();
+  const destination = (searchParams.get("destination") || "NRT").toUpperCase();
   const departDate = searchParams.get("departDate") || "";
   const returnDate = searchParams.get("returnDate") || "";
   const passengers = searchParams.get("passengers") || "1";
 
+  useEffect(() => {
+    if (!departDate) return;
+    setLoading(true);
+
+    Promise.all([
+      fetch(`${API}/api/flights/search?origin=${origin}&destination=${destination}&departDate=${departDate}`)
+        .then((r) => r.json())
+        .then((d) => d.flights || [])
+        .catch(() => []),
+      fetch(`${API}/api/flights/nearest-airports?origin=${origin}&destination=${destination}&date=${departDate}`)
+        .then((r) => r.json())
+        .then((d) => d.airports || [])
+        .catch(() => []),
+    ]).then(([f, n]) => {
+      setFlights(f);
+      setNearest(n);
+      setLoading(false);
+    });
+  }, [origin, destination, departDate]);
+
+  const sorted = [...flights].sort((a, b) =>
+    sortBy === "price" ? a.price - b.price : a.duration - b.duration
+  );
+
   return (
     <>
-      {/* Search Summary */}
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex flex-wrap items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-lg">{origin}</span>
-            <span className="text-gray-400">→</span>
-            <span className="font-mono font-bold text-lg">{destination}</span>
-          </div>
-          <div className="w-px h-6 bg-gray-300 hidden sm:block" />
-          <div className="text-gray-600">
-            <span className="font-medium text-gray-900">{departDate}</span>
-            {returnDate && (
-              <>
-                <span className="mx-2">↔</span>
-                <span className="font-medium text-gray-900">{returnDate}</span>
-              </>
-            )}
-          </div>
-          <div className="w-px h-6 bg-gray-300 hidden sm:block" />
-          <div className="text-gray-600">{passengers} 人</div>
-          <div className="ml-auto text-sky-600 font-medium">
-            找到 {MOCK_FLIGHTS.length} 個航班
-          </div>
+      {/* Search Summary Bar */}
+      <div style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
+        borderRadius: 12,
+        padding: "14px 20px",
+        marginBottom: 24,
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 16,
+        fontSize: 14,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>
+            {origin}
+          </span>
+          <span style={{ color: "var(--text-muted)" }}>→</span>
+          <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>
+            {destination}
+          </span>
+        </div>
+        <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+        <div style={{ color: "var(--text-secondary)" }}>
+          <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{departDate}</span>
+          {returnDate && <><span style={{ margin: "0 8px", color: "var(--text-muted)" }}>↔</span><span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{returnDate}</span></>}
+        </div>
+        <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+        <div style={{ color: "var(--text-secondary)" }}>{passengers} 人</div>
+        <div style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: 13 }}>
+          {loading ? "搜尋中..." : `找到 ${flights.length} 個航班`}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Tabs */}
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="flex border-b">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, alignItems: "start" }}>
+
+        {/* ── Main: Flight List ───────────────────────────────── */}
+        <div>
+          {/* Tabs + Sort */}
+          <div style={{
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+            borderRadius: "12px 12px 0 0",
+            display: "flex",
+            borderBottom: "none",
+          }}>
+            {(["flights", "calendar"] as const).map((tab) => (
               <button
-                type="button"
-                onClick={() => setActiveTab("flights")}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition ${
-                  activeTab === "flights"
-                    ? "text-sky-600 border-b-2 border-sky-600 bg-sky-50"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  flex: 1, padding: "12px",
+                  background: "transparent",
+                  border: "none",
+                  color: activeTab === tab ? "var(--accent)" : "var(--text-secondary)",
+                  borderBottom: `2px solid ${activeTab === tab ? "var(--accent)" : "transparent"}`,
+                  cursor: "pointer",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  transition: "all 0.2s",
+                }}
               >
-                航班列表
+                {tab === "flights" ? "航班列表" : "價格日曆"}
               </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("calendar")}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition ${
-                  activeTab === "calendar"
-                    ? "text-sky-600 border-b-2 border-sky-600 bg-sky-50"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
+            ))}
+            <div style={{ padding: "12px 16px", marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>排序：</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as "price" | "duration")}
+                style={{
+                  background: "var(--bg-secondary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  color: "var(--text-primary)",
+                  cursor: "pointer",
+                }}
               >
-                價格日曆
-              </button>
+                <option value="price">價格</option>
+                <option value="duration">飛行時間</option>
+              </select>
             </div>
+          </div>
 
-            <div className="p-4">
-              {activeTab === "flights" ? (
-                <div className="space-y-3">
-                  {MOCK_FLIGHTS.map((flight) => (
-                    <div
-                      key={flight.id}
-                      className="border border-gray-200 rounded-xl p-4 hover:border-sky-300 hover:shadow-md transition"
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        {/* Airline */}
-                        <div className="flex flex-col items-center min-w-[80px]">
-                          <span className="text-sm text-gray-500">
-                            {flight.airline}
-                          </span>
-                          <span className="font-mono font-medium">
-                            {flight.flightNumber}
-                          </span>
+          {/* Flight Cards */}
+          <div style={{
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+            borderTop: "none",
+            borderRadius: "0 0 12px 12px",
+            overflow: "hidden",
+          }}>
+            {loading ? (
+              <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>✈️</div>
+                <div style={{ fontSize: 14 }}>搜尋中...</div>
+              </div>
+            ) : sorted.length === 0 ? (
+              <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>😢</div>
+                <div style={{ fontSize: 14 }}>目前沒有找到航班，請嘗試其他日期</div>
+              </div>
+            ) : activeTab === "flights" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {sorted.map((flight, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: "18px 20px",
+                      borderBottom: i < sorted.length - 1 ? "1px solid var(--border)" : "none",
+                      display: "grid",
+                      gridTemplateColumns: "100px 1fr auto",
+                      gap: 20,
+                      alignItems: "center",
+                      transition: "background 0.2s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-card-hover)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    {/* Airline */}
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{
+                        width: 44, height: 44,
+                        background: "var(--bg-secondary)",
+                        borderRadius: 8,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 18, margin: "0 auto 6px",
+                      }}>🛫</div>
+                      <div style={{ fontSize: 11, color: "var(--text-secondary)", textAlign: "center" }}>
+                        {flight.airline}
+                      </div>
+                      <div style={{ fontSize: 11, fontFamily: "monospace", color: "var(--text-muted)", textAlign: "center" }}>
+                        {flight.flightNumber}
+                      </div>
+                    </div>
+
+                    {/* Route */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 20, fontWeight: 600 }}>{formatTime(flight.departure)}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                          {flight.origin}
                         </div>
-
-                        {/* Route */}
-                        <div className="flex-1 flex items-center gap-2">
-                          <div className="text-center">
-                            <div className="text-xl font-bold">
-                              {formatTime(flight.departure)}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {flight.origin}
-                            </div>
-                          </div>
-                          <div className="flex-1 flex flex-col items-center px-2">
-                            <div className="text-xs text-gray-400">
-                              {formatDuration(flight.duration)}
-                            </div>
-                            <div className="w-full h-px bg-gray-300 relative my-1">
-                              {flight.stops > 0 && (
-                                <>
-                                  {Array.from({ length: flight.stops }).map(
-                                    (_, i) => (
-                                      <div
-                                        key={i}
-                                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-sky-400 rounded-full"
-                                      />
-                                    )
-                                  )}
-                                </>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {flight.stops === 0
-                                ? "直飛"
-                                : `${flight.stops} 轉機`}
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-xl font-bold">
-                              {formatTime(flight.arrival)}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {flight.destination}
-                            </div>
-                          </div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          {formatDate(flight.departure)}
                         </div>
+                      </div>
 
-                        {/* Price & Buy */}
-                        <div className="flex flex-col items-end gap-2">
-                          <div className="text-right">
-                            <span className="text-2xl font-bold text-sky-600">
-                              NT${flight.price.toLocaleString()}
-                            </span>
-                          </div>
-                          <a
-                            href={flight.affiliateUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-6 py-2 bg-sky-600 hover:bg-sky-700 text-white font-medium rounded-lg transition text-sm"
-                          >
-                            購買
-                          </a>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          {formatDuration(flight.duration)}
+                        </div>
+                        <div style={{
+                          width: 80, height: 1,
+                          background: "var(--border)",
+                          margin: "4px auto",
+                          position: "relative",
+                        }}>
+                          {flight.stops > 0 && (
+                            <div style={{
+                              position: "absolute", top: -2, left: "50%",
+                              transform: "translateX(-50%)",
+                              width: 6, height: 6,
+                              background: "var(--warning)",
+                              borderRadius: "50%",
+                            }} />
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: flight.stops === 0 ? "var(--success)" : "var(--text-muted)" }}>
+                          {flight.stops === 0 ? "直飛" : `${flight.stops} 轉機`}
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 20, fontWeight: 600 }}>{formatTime(flight.arrival)}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                          {flight.destination}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          {formatDate(flight.arrival)}
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                /* Calendar View */
-                <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-4">
-                    7月份價格趨勢
-                  </h3>
-                  <div className="grid grid-cols-7 gap-2">
-                    {MOCK_CALENDAR.map((day) => (
-                      <div
-                        key={day.date}
-                        className="text-center p-2 border border-gray-200 rounded-lg hover:border-sky-300 transition cursor-pointer"
-                      >
-                        <div className="text-xs text-gray-500 mb-1">
-                          {formatDate(day.date)}
-                        </div>
-                        <div className="font-semibold text-sky-600">
-                          NT${day.price.toLocaleString()}
-                        </div>
+
+                    {/* Price + CTA */}
+                    <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                      <div>
+                        <span style={{ fontSize: 22, fontWeight: 700, color: "var(--accent)" }}>
+                          {formatPrice(flight.price, flight.currency)}
+                        </span>
                       </div>
-                    ))}
+                      <a
+                        href={flight.affiliateUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "8px 20px",
+                          background: "var(--accent)",
+                          color: "var(--bg-primary)",
+                          borderRadius: 8,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          textDecoration: "none",
+                          boxShadow: "0 2px 12px var(--accent-glow)",
+                          transition: "all 0.2s",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,212,255,0.5)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 12px var(--accent-glow)")}
+                      >
+                        前往預訂
+                      </a>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-4">
-                    * 價格為來回機票每人價格，可能因匯率變動而調整
-                  </p>
-                </div>
-              )}
-            </div>
+                ))}
+              </div>
+            ) : (
+              /* Calendar placeholder */
+              <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
+                📅 價格日曆（即將上線，Phase 2 支援）
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
+        {/* ── Sidebar ──────────────────────────────────────────── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
           {/* Nearest Airport Tips */}
-          <div className="bg-white rounded-xl shadow-sm p-4">
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              🚗 鄰近機場優惠
-            </h3>
-            <p className="text-sm text-gray-600 mb-3">
-              考慮從鄰近機場出發，節省更多
-            </p>
-            <div className="space-y-2">
-              {MOCK_NEAREST.map((airport) => (
-                <div
-                  key={airport.iata}
-                  className="flex items-center justify-between p-2 bg-sky-50 rounded-lg"
-                >
+          <div style={cardStyle}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 18 }}>🚗</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                鄰近機場優惠
+              </span>
+            </div>
+            {loading ? (
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>載入中...</div>
+            ) : nearest.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>目前無替代機場優惠</div>
+            ) : (
+              nearest.map((a) => (
+                <div key={a.iata} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "8px 10px",
+                  background: "var(--bg-secondary)",
+                  borderRadius: 8,
+                  marginBottom: 6,
+                }}>
                   <div>
-                    <span className="font-mono font-bold text-sky-700">
-                      {airport.iata}
+                    <span style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, color: "var(--accent)" }}>
+                      {a.iata}
                     </span>
-                    <span className="text-xs text-gray-500 ml-2">
-                      {airport.name} ({airport.distance}km)
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 6 }}>
+                      {a.name}（{a.distance}km）
                     </span>
                   </div>
-                  <span className="text-sm font-medium text-green-600">
-                    省 NT${airport.savings.toLocaleString()}
+                  <span style={{ fontSize: 12, color: "var(--success)", fontWeight: 600 }}>
+                    省 NT${a.savings.toLocaleString()}
                   </span>
                 </div>
-              ))}
-            </div>
+              ))
+            )}
           </div>
 
           {/* Hub Tips */}
-          <div className="bg-white rounded-xl shadow-sm p-4">
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              🛫 替代樞紐提示
-            </h3>
-            <p className="text-sm text-gray-600 mb-3">
-              經過主要樞紐機場轉機可能更便宜
-            </p>
-            <div className="space-y-2">
-              {MOCK_HUBS.map((hub) => (
-                <div
-                  key={hub.hub}
-                  className="flex items-center justify-between p-2 bg-amber-50 rounded-lg"
-                >
-                  <div>
-                    <span className="font-mono font-bold text-amber-700">
-                      {hub.hub}
-                    </span>
-                    <span className="text-xs text-gray-500 ml-2">
-                      {hub.name}
-                    </span>
-                  </div>
-                  <span className="text-sm font-medium text-green-600">
-                    省 NT${hub.savings.toLocaleString()}
-                  </span>
-                </div>
-              ))}
+          <div style={cardStyle}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 18 }}>🛫</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                替代樞紐提示
+              </span>
             </div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+              經主要樞紐轉機可能更便宜
+            </div>
+            {[
+              { hub: "ICN", name: "首爾仁川", savings: 2100 },
+              { hub: "HKG", name: "香港國際", savings: 1500 },
+            ].map((h) => (
+              <div key={h.hub} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "8px 10px",
+                background: "var(--bg-secondary)",
+                borderRadius: 8,
+                marginBottom: 6,
+              }}>
+                <div>
+                  <span style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, color: "var(--accent-secondary)" }}>
+                    {h.hub}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 6 }}>{h.name}</span>
+                </div>
+                <span style={{ fontSize: 12, color: "var(--success)", fontWeight: 600 }}>
+                  省 NT${h.savings.toLocaleString()}
+                </span>
+              </div>
+            ))}
           </div>
 
           {/* Hotel Stub */}
-          <div className="bg-white rounded-xl shadow-sm p-4">
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              🏨 機+酒套裝
-            </h3>
-            <p className="text-sm text-gray-500 mb-4">
-              預訂機票同時解鎖飯店優惠
-            </p>
-            <div className="bg-gray-100 rounded-lg p-4 text-center">
-              <p className="text-sm text-gray-500">
-                飯店推薦區塊（即將上線）
-              </p>
+          <div style={cardStyle}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 18 }}>🏨</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                機+酒套裝
+              </span>
+            </div>
+            <div style={{
+              padding: 20,
+              background: "var(--bg-secondary)",
+              borderRadius: 8,
+              textAlign: "center",
+              fontSize: 13,
+              color: "var(--text-muted)",
+            }}>
+              即將上線
             </div>
           </div>
         </div>
@@ -397,46 +420,67 @@ function SearchResultsContent() {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+const cardStyle: React.CSSProperties = {
+  background: "var(--bg-card)",
+  border: "1px solid var(--border)",
+  borderRadius: 12,
+  padding: "18px 16px",
+};
 
+// ── Page ───────────────────────────────────────────────────
 export default function SearchPage() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div style={{ background: "var(--bg-primary)", minHeight: "100vh", color: "var(--text-primary)" }}>
+
       {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-2xl font-bold text-sky-600">
-            ✈️ FlightPlus
+      <header style={{
+        background: "var(--bg-secondary)",
+        borderBottom: "1px solid var(--border)",
+        position: "sticky",
+        top: 0,
+        zIndex: 100,
+        backdropFilter: "blur(10px)",
+      }}>
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+            <div style={{
+              width: 32, height: 32,
+              background: "linear-gradient(135deg, var(--accent), var(--accent-secondary))",
+              borderRadius: 7,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16,
+            }}>✈️</div>
+            <span style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>FlightPlus</span>
           </Link>
-          <nav className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">搜尋結果</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>搜尋結果</span>
             <Link
               href="/"
-              className="px-4 py-2 bg-sky-100 text-sky-700 rounded-lg text-sm hover:bg-sky-200 transition"
+              style={{
+                padding: "7px 16px",
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                fontSize: 13,
+                color: "var(--text-secondary)",
+                textDecoration: "none",
+                transition: "all 0.2s",
+              }}
             >
               重新搜尋
             </Link>
-          </nav>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-20">
-              <div className="text-gray-500">載入中...</div>
-            </div>
-          }
-        >
+      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px" }}>
+        <Suspense fallback={<div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)" }}>載入中...</div>}>
           <SearchResultsContent />
         </Suspense>
       </main>
 
-      {/* Footer */}
-      <footer className="mt-16 border-t border-gray-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
-          <p>© 2026 FlightPlus. 全球機票比價平台。</p>
-        </div>
+      <footer style={{ borderTop: "1px solid var(--border)", padding: "28px 0", textAlign: "center" }}>
+        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>© 2026 FlightPlus. 全球機票比價平台。</p>
       </footer>
     </div>
   );

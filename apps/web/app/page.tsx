@@ -14,7 +14,6 @@ export default function HomePage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-
     const params = new URLSearchParams({
       origin: origin.toUpperCase(),
       destination: destination.toUpperCase(),
@@ -22,209 +21,299 @@ export default function HomePage() {
       ...(tripType === "roundtrip" && returnDate ? { returnDate } : {}),
       passengers: passengers.toString(),
     });
-
-    console.log("🔍 Search payload:", Object.fromEntries(params));
-
     router.push(`/search?${params.toString()}`);
+  };
+
+  const handleSwap = () => {
+    const temp = origin;
+    setOrigin(destination);
+    setDestination(temp);
   };
 
   const today = new Date().toISOString().split("T")[0];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-sky-600">
-            ✈️ FlightPlus
-          </h1>
-          <nav className="hidden md:flex gap-6 text-sm">
-            <a href="#" className="text-gray-600 hover:text-sky-600 transition">
-              機票
-            </a>
-            <a href="#" className="text-gray-600 hover:text-sky-600 transition">
-              酒店
-            </a>
-            <a href="#" className="text-gray-600 hover:text-sky-600 transition">
-              優惠
-            </a>
+    <div style={{ background: "var(--bg-primary)", minHeight: "100vh", color: "var(--text-primary)" }}>
+
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <header style={{
+        background: "var(--bg-secondary)",
+        borderBottom: "1px solid var(--border)",
+        position: "sticky",
+        top: 0,
+        zIndex: 100,
+        backdropFilter: "blur(10px)",
+      }}>
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 36, height: 36,
+              background: "linear-gradient(135deg, var(--accent), var(--accent-secondary))",
+              borderRadius: 8,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 18,
+            }}>
+              ✈️
+            </div>
+            <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)" }}>
+              FlightPlus
+            </span>
+          </div>
+
+          {/* Nav */}
+          <nav style={{ display: "flex", gap: 28 }}>
+            {["機票", "酒店", "優惠"].map((item) => (
+              <a
+                key={item}
+                href="#"
+                style={{
+                  color: "var(--text-secondary)",
+                  textDecoration: "none",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  transition: "color 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-secondary)")}
+              >
+                {item}
+              </a>
+            ))}
           </nav>
         </div>
       </header>
 
-      {/* ── Hero Section (p5.js 動畫背景) ───────────────────────── */}
-      <section className="relative w-full overflow-hidden" style={{ height: "calc(100vh - 73px)" }}>
-        {/* p5.js 動畫背景（iframe absolutely positioned） */}
-        <iframe
-          src="/flightplus-hero.html"
-          title="FlightPlus Hero Animation"
-          className="absolute inset-0 w-full h-full"
-          style={{ border: "none", pointerEvents: "none" }}
-          allow="accelerometer; autoplay"
-          loading="eager"
-        />
+      {/* ── Hero Section ────────────────────────────────────────── */}
+      <section style={{
+        position: "relative",
+        minHeight: "calc(100vh - 73px)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "40px 20px",
+        overflow: "hidden",
+      }}>
 
-        {/* 半透明遮罩 + 搜尋框（絕對定位於動畫之上） */}
-        <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
-          {/* 頂部標題文字 */}
-          <div className="text-center mb-8 drop-shadow-lg">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-              找到最優惠的機票
-            </h2>
-            <p className="text-lg text-white/90">
-              比較全球航空公司，智慧轉機策略，讓您省更多
-            </p>
-          </div>
+        {/* Ambient glow effects */}
+        <div style={{
+          position: "absolute", top: "10%", left: "50%", transform: "translateX(-50%)",
+          width: 600, height: 600,
+          background: "radial-gradient(circle, rgba(0,212,255,0.08) 0%, transparent 70%)",
+          pointerEvents: "none",
+        }} />
+        <div style={{
+          position: "absolute", bottom: "20%", right: "5%",
+          width: 400, height: 400,
+          background: "radial-gradient(circle, rgba(124,58,237,0.06) 0%, transparent 70%)",
+          pointerEvents: "none",
+        }} />
 
-          {/* 搜尋框（玻璃質感卡片） */}
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-4xl">
-          {/* Trip Type Toggle */}
-          <div className="flex gap-4 mb-6">
-            <button
-              type="button"
-              onClick={() => setTripType("roundtrip")}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                tripType === "roundtrip"
-                  ? "bg-sky-600 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              來回
-            </button>
-            <button
-              type="button"
-              onClick={() => setTripType("oneway")}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                tripType === "oneway"
-                  ? "bg-sky-600 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              單程
-            </button>
+        {/* Hero text */}
+        <div style={{ textAlign: "center", marginBottom: 36, position: "relative", zIndex: 1 }}>
+          <h2 style={{
+            fontSize: "clamp(2rem, 5vw, 3rem)",
+            fontWeight: 700,
+            marginBottom: 12,
+            background: "linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.7) 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}>
+            找到最優惠的機票
+          </h2>
+          <p style={{ fontSize: 18, color: "var(--text-secondary)" }}>
+            比較全球航空公司，智慧轉機策略，讓您省更多
+          </p>
+        </div>
+
+        {/* Search Card */}
+        <div style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          borderRadius: 20,
+          padding: "28px 32px",
+          width: "100%",
+          maxWidth: 760,
+          position: "relative",
+          zIndex: 1,
+          boxShadow: "0 24px 80px rgba(0,0,0,0.4)",
+        }}>
+          {/* Trip Type */}
+          <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+            {(["roundtrip", "oneway"] as const).map((type) => (
+              <label key={type} style={{
+                display: "flex", alignItems: "center", gap: 8,
+                cursor: "pointer", fontSize: 14,
+                color: tripType === type ? "var(--accent)" : "var(--text-secondary)",
+                transition: "color 0.2s",
+              }}>
+                <input
+                  type="radio"
+                  name="tripType"
+                  checked={tripType === type}
+                  onChange={() => setTripType(type)}
+                  style={{ appearance: "none", width: 18, height: 18 }}
+                />
+                <span style={{
+                  width: 18, height: 18,
+                  border: `2px solid ${tripType === type ? "var(--accent)" : "var(--border)"}`,
+                  borderRadius: "50%",
+                  display: "inline-block",
+                  background: tripType === type ? "var(--accent)" : "transparent",
+                  boxShadow: "inset 0 0 0 3px var(--bg-card)",
+                  transition: "all 0.2s",
+                }} />
+                {type === "roundtrip" ? "來回" : "單程"}
+              </label>
+            ))}
           </div>
 
           <form onSubmit={handleSearch}>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              {/* Origin */}
-              <div>
-                <label
-                  htmlFor="origin"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  出發地
-                </label>
-                <input
-                  id="origin"
-                  type="text"
-                  placeholder="TPE"
-                  maxLength={3}
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value.toUpperCase())}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none uppercase font-mono text-lg transition"
-                />
+            {/* Search Grid */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 16,
+              marginBottom: 16,
+            }}>
+              {/* Origin + Destination with Swap */}
+              <div style={{ display: "contents" }}>
+                <div style={{ position: "relative" }}>
+                  <label style={labelStyle}>出發地</label>
+                  <input
+                    id="origin"
+                    type="text"
+                    placeholder="TPE"
+                    maxLength={3}
+                    value={origin}
+                    onChange={(e) => setOrigin(e.target.value.toUpperCase())}
+                    required
+                    style={inputStyle}
+                  />
+                </div>
+
+                {/* Swap Button */}
+                <div style={{
+                  position: "absolute", left: "50%", top: "50%",
+                  transform: "translate(-50%, -50%)",
+                  zIndex: 2,
+                }}>
+                  <button
+                    type="button"
+                    onClick={handleSwap}
+                    style={{
+                      width: 36, height: 36,
+                      background: "var(--bg-secondary)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "50%",
+                      cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 16,
+                      color: "var(--text-secondary)",
+                      transition: "all 0.2s",
+                    }}
+                    title="交換起點與目的地"
+                  >
+                    ⇄
+                  </button>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>目的地</label>
+                  <input
+                    id="destination"
+                    type="text"
+                    placeholder="NRT"
+                    maxLength={3}
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value.toUpperCase())}
+                    required
+                    style={{ ...inputStyle, textTransform: "uppercase" }}
+                  />
+                </div>
               </div>
 
-              {/* Destination */}
+              {/* Dates */}
               <div>
-                <label
-                  htmlFor="destination"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  目的地
-                </label>
+                <label style={labelStyle}>出發日期</label>
                 <input
-                  id="destination"
-                  type="text"
-                  placeholder="NRT"
-                  maxLength={3}
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value.toUpperCase())}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none uppercase font-mono text-lg transition"
-                />
-              </div>
-
-              {/* Departure Date */}
-              <div>
-                <label
-                  htmlFor="departDate"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  出發日期
-                </label>
-                <input
-                  id="departDate"
                   type="date"
                   value={departDate}
                   onChange={(e) => setDepartDate(e.target.value)}
                   min={today}
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition"
+                  style={inputStyle}
                 />
               </div>
 
-              {/* Return Date */}
-              {tripType === "roundtrip" && (
-                <div>
-                  <label
-                    htmlFor="returnDate"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    回程日期
-                  </label>
-                  <input
-                    id="returnDate"
-                    type="date"
-                    value={returnDate}
-                    onChange={(e) => setReturnDate(e.target.value)}
-                    min={departDate || today}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition"
-                  />
-                </div>
-              )}
-            </div>
+              <div>
+                <label style={labelStyle}>回程日期 {tripType === "oneway" && <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>（可選）</span>}</label>
+                <input
+                  type="date"
+                  value={returnDate}
+                  onChange={(e) => setReturnDate(e.target.value)}
+                  min={departDate || today}
+                  disabled={tripType === "oneway"}
+                  style={{
+                    ...inputStyle,
+                    opacity: tripType === "oneway" ? 0.4 : 1,
+                    cursor: tripType === "oneway" ? "not-allowed" : "text",
+                  }}
+                />
+              </div>
 
-            {/* Passengers & Search Button */}
-            <div className="flex flex-col sm:flex-row gap-4 items-end">
-              <div className="flex-1">
-                <label
-                  htmlFor="passengers"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  乘客人數
-                </label>
+              {/* Passengers */}
+              <div>
+                <label style={labelStyle}>乘客人數</label>
                 <select
-                  id="passengers"
                   value={passengers}
                   onChange={(e) => setPassengers(Number(e.target.value))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition bg-white"
+                  style={inputStyle}
                 >
                   {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>
-                      {n} 人
-                    </option>
+                    <option key={n} value={n}>{n} 人</option>
                   ))}
                 </select>
               </div>
-
-              <button
-                type="submit"
-                className="w-full sm:w-auto px-8 py-3 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-lg transition shadow-lg hover:shadow-xl"
-              >
-                搜尋航班
-              </button>
             </div>
+
+            {/* Submit */}
+            <button
+              type="submit"
+              style={{
+                width: "100%",
+                padding: "14px",
+                background: "var(--accent)",
+                color: "var(--bg-primary)",
+                border: "none",
+                borderRadius: 12,
+                fontSize: 16,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.2s",
+                boxShadow: "0 4px 20px var(--accent-glow)",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 32px rgba(0,212,255,0.5)";
+                (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 20px var(--accent-glow)";
+                (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
+              }}
+            >
+              搜尋航班
+            </button>
           </form>
         </div>
 
         {/* Popular Routes */}
-        <div className="mt-12 text-center">
-          <h3 className="text-lg font-medium text-gray-700 mb-4">
+        <div style={{ marginTop: 40, textAlign: "center", position: "relative", zIndex: 1 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 14 }}>
             熱門航線
           </h3>
-          <div className="flex flex-wrap justify-center gap-3">
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 10 }}>
             {[
               { from: "TPE", to: "NRT" },
               { from: "TPE", to: "ICN" },
@@ -239,25 +328,67 @@ export default function HomePage() {
                   setOrigin(route.from);
                   setDestination(route.to);
                 }}
-                className="px-4 py-2 bg-white border border-gray-200 rounded-full text-sm text-gray-700 hover:border-sky-400 hover:text-sky-600 transition"
+                style={{
+                  padding: "8px 16px",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 20,
+                  fontSize: 13,
+                  color: "var(--text-secondary)",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--accent)";
+                  (e.currentTarget as HTMLButtonElement).style.color = "var(--accent)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)";
+                  (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
+                }}
               >
                 {route.from} → {route.to}
               </button>
             ))}
           </div>
         </div>
-        </div>
       </section>
 
-      {/* Footer */}
-      <footer className="mt-16 border-t border-gray-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
-          <p>© 2026 FlightPlus. 全球機票比價平台。</p>
-          <p className="mt-2">
-            機票價格來自 Travelpayouts API，實際價格以供應商為準。
-          </p>
-        </div>
+      {/* ── Footer ─────────────────────────────────────────────── */}
+      <footer style={{
+        borderTop: "1px solid var(--border)",
+        padding: "32px 0",
+        textAlign: "center",
+      }}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          © 2026 FlightPlus. 全球機票比價平台。
+        </p>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>
+          機票價格來自 Travelpayouts API，實際價格以供應商為準。
+        </p>
       </footer>
     </div>
   );
 }
+
+// ── Inline styles ──────────────────────────────────────────
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  fontWeight: 500,
+  color: "var(--text-secondary)",
+  marginBottom: 6,
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 14px",
+  background: "var(--bg-secondary)",
+  border: "1px solid var(--border)",
+  borderRadius: 10,
+  fontSize: 15,
+  color: "var(--text-primary)",
+  outline: "none",
+  transition: "border-color 0.2s",
+  fontFamily: "inherit",
+};
