@@ -47,6 +47,32 @@ export interface BestDatesResponse {
   };
 }
 
+export interface PromotionResponse {
+  origin: string;
+  destination: string;
+  analyzedAt: string;
+  hasActivePromotion: boolean;
+  deals: Array<{
+    airline: string;
+    price: number;
+    currency: string;
+    departureDate: string;
+    originalPrice: number;
+    discountPercent: number;
+    dealType: string;
+    confidence: number;
+    badge: string;
+    reason: string;
+  }>;
+  meta: {
+    currentAvgPrice: number;
+    historicalAvgPrice: number;
+    priceDropPercent: number;
+    airlinesAnalyzed: string[];
+    confidence: number;
+  };
+}
+
 export interface HotelOption {
   name: string;
   location: string;
