@@ -10,6 +10,7 @@ import { flightsRoutes } from './routes/flights.js';
 import { hotelsRoutes } from './routes/hotels.js';
 import { negotiationRoutes } from './routes/negotiation.js';
 import { promotionRoutes } from './routes/promotions.js';
+import { feeRoutes } from './routes/fees.js';
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
@@ -41,6 +42,7 @@ async function main() {
   await app.register(hotelsRoutes);
   await app.register(negotiationRoutes);
   await app.register(promotionRoutes);
+  await app.register(feeRoutes);
 
   // Start
   try {
