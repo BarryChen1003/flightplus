@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { searchCheapFlights, getNearestPlacesMatrix, getCalendarPrices } from '../services/travelpayouts.js';
+import { findBestConnections } from '../services/connection-finder.js';
 import { getCachedFlightSearch } from '../services/cache.js';
 import type { FlightSearchResponse, NearestAirportResponse, FlightSearchQuery, NearestAirportQuery, BestDatesResponse, CalendarDay } from '../types/index.js';
 
@@ -23,18 +24,16 @@ function generateMockCalendar(
   const AIRLINES = ['Eva Air', 'China Airlines', 'Japan Airlines', 'Peach Aviation', 'Cathay Pacific'];
   const result: Array<{ date: string; price: number; airline: string; stops: number }> = [];
 
-  // Generate realistic price variation (weekends + midweek pattern)
   for (let day = 1; day <= daysInMonth; day++) {
     const date = `${month}-${String(day).padStart(2, '0')}`;
     const dow = new Date(year, monthNum - 1, day).getDay();
-    // Friday/Saturday departures are more expensive, Tuesday/Wednesday cheaper
     const isWeekend = dow === 0 || dow === 5 || dow === 6;
     const basePrice = isWeekend ? 140 + Math.floor(Math.random() * 80) : 90 + Math.floor(Math.random() * 70);
     result.push({
       date,
       price: Math.round(basePrice),
       airline: AIRLINES[day % AIRLINES.length],
-      stops: day % 5 === 0 ? 1 : 0, // every 5th day has 1 stop
+      stops: day % 5 === 0 ? 1 : 0,
     });
   }
   return result;
@@ -48,6 +47,7 @@ const nearestAirportSchema = z.object({
 });
 
 export async function flightsRoutes(app: FastifyInstance): Promise<void> {
+
   // GET /api/flights/search
   app.get('/api/flights/search', async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = flightSearchSchema.safeParse(req.query);
@@ -63,7 +63,6 @@ export async function flightsRoutes(app: FastifyInstance): Promise<void> {
         meta: { count: flights.length, cached: false },
       };
 
-      // Check cache for cached flag
       const cached = await getCachedFlightSearch(q.origin, q.destination, q.departDate);
       if (cached) {
         response.meta.cached = true;
@@ -163,6 +162,28 @@ export async function flightsRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Best dates search failed';
       app.log.error({ err }, 'best-dates error');
+      return reply.status(502).send({ error: 'Upstream API error', details: message });
+    }
+  });
+
+  // GET /api/flights/connections — Strategy 3: 1-stop connection finder
+  app.get('/api/flights/connections', async (req: FastifyRequest, reply: FastifyReply) => {
+    const schema = z.object({
+      origin: z.string().length(3).toUpperCase(),
+      destination: z.string().length(3).toUpperCase(),
+    });
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid parameters', details: parsed.error.format() });
+    }
+    const { origin, destination } = parsed.data;
+
+    try {
+      const result = await findBestConnections(origin, destination);
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Connections search failed';
+      app.log.error({ err }, 'connections error');
       return reply.status(502).send({ error: 'Upstream API error', details: message });
     }
   });

@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import AirportSelector from "../../components/AirportSelector";
 
+const API = "https://flightplus-api.onrender.com";
+
+// ── Types ────────────────────────────────────────────────
 interface Flight {
   price: number;
   currency: string;
@@ -25,6 +28,27 @@ interface NearestAirport {
   distance: number;
   savings: number;
   flights: Flight[];
+}
+
+interface CalendarDay {
+  date: string;
+  price: number;
+  airline: string;
+  direct: boolean;
+}
+
+interface BestDatesData {
+  dates: CalendarDay[];
+  cheapest: CalendarDay;
+  meta: { avgPrice: number; minPrice: number; maxPrice: number; savingsVsAvg: number };
+}
+
+interface Connection {
+  route: string[];
+  totalPrice: number;
+  savings: number;
+  savingsPercent: number;
+  breakdown: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────
@@ -51,8 +75,204 @@ function formatPrice(price: number, currency: string): string {
   return `NT$${price.toLocaleString()}`;
 }
 
-// ── API Base URL ───────────────────────────────────────────
-const API = "https://flightplus-api.onrender.com";
+function getPriceColor(price: number, min: number, max: number): string {
+  if (max === min) return "var(--success)";
+  const ratio = (price - min) / (max - min);
+  if (ratio < 0.25) return "#10b981"; // green — cheapest
+  if (ratio < 0.5) return "#34d399";
+  if (ratio < 0.75) return "#fbbf24"; // yellow
+  return "#f87171"; // red — most expensive
+}
+
+// ── Calendar View ─────────────────────────────────────────
+function CalendarView({
+  origin,
+  destination,
+  departDate,
+  onSelectDay,
+}: {
+  origin: string;
+  destination: string;
+  departDate: string;
+  onSelectDay: (d: string) => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const currentMonth = departDate ? departDate.slice(0, 7) : today.slice(0, 7);
+  const [month, setMonth] = useState(currentMonth);
+  const [data, setData] = useState<BestDatesData | null>(null);
+  const [calLoading, setCalLoading] = useState(false);
+
+  const fetchCalendar = useCallback(async (m: string) => {
+    setCalLoading(true);
+    try {
+      const res = await fetch(`${API}/api/flights/best-dates?origin=${origin}&destination=${destination}&month=${m}`);
+      if (res.ok) setData(await res.json());
+    } catch { /* ignore */ }
+    setCalLoading(false);
+  }, [origin, destination]);
+
+  useEffect(() => { fetchCalendar(month); }, [month, fetchCalendar]);
+
+  const prevMonth = () => {
+    const [y, m] = month.split("-").map(Number);
+    const d = new Date(y, m - 2, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+  const nextMonth = () => {
+    const [y, m] = month.split("-").map(Number);
+    const d = new Date(y, m, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const [y, m] = month.split("-").map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const firstDow = new Date(y, m - 1, 1).getDay(); // 0=Sun
+  const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+
+  const priceMap = new Map<string, CalendarDay>();
+  data?.dates.forEach((d) => priceMap.set(d.date, d));
+  const minP = data?.meta.minPrice ?? 0;
+  const maxP = data?.meta.maxPrice ?? 0;
+
+  return (
+    <div>
+      {/* Stats bar */}
+      {data && (
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 12, marginBottom: 20,
+        }}>
+          {[
+            { label: "最低價", value: `$${minP}`, color: "var(--success)" },
+            { label: "平均價", value: `$${data.meta.avgPrice}`, color: "var(--text-primary)" },
+            { label: "最高價", value: `$${maxP}`, color: "#f87171" },
+            { label: "省多大", value: `${data.meta.savingsVsAvg}%`, color: "var(--accent)" },
+          ].map((s) => (
+            <div key={s.label} style={{
+              background: "var(--bg-secondary)", borderRadius: 10,
+              padding: "10px 12px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Month navigation */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        marginBottom: 12,
+      }}>
+        <button
+          onClick={prevMonth}
+          style={navBtn}
+        >←</button>
+        <span style={{ fontSize: 15, fontWeight: 600 }}>
+          {y} 年 {m} 月
+        </span>
+        <button
+          onClick={nextMonth}
+          style={navBtn}
+        >→</button>
+      </div>
+
+      {/* Day name headers */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
+        {dayNames.map((d) => (
+          <div key={d} style={{
+            textAlign: "center", fontSize: 11, color: "var(--text-muted)",
+            padding: "4px 0", fontWeight: 500,
+          }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      {calLoading ? (
+        <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>載入中...</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+          {/* Leading empty cells */}
+          {Array.from({ length: firstDow }, (_, i) => (
+            <div key={`e${i}`} />
+          ))}
+          {/* Day cells */}
+          {Array.from({ length: daysInMonth }, (_, i) => {
+            const day = i + 1;
+            const dateStr = `${month}-${String(day).padStart(2, "0")}`;
+            const entry = priceMap.get(dateStr);
+            const isToday = dateStr === today;
+            const isSelected = dateStr === departDate;
+            const priceColor = entry ? getPriceColor(entry.price, minP, maxP) : "var(--text-muted)";
+
+            return (
+              <button
+                key={dateStr}
+                onClick={() => entry && onSelectDay(dateStr)}
+                style={{
+                  position: "relative",
+                  padding: "8px 4px",
+                  borderRadius: 8,
+                  border: isSelected ? "2px solid var(--accent)" : isToday ? "1px solid var(--border)" : "1px solid transparent",
+                  background: entry ? `${priceColor}18` : "transparent",
+                  cursor: entry ? "pointer" : "default",
+                  textAlign: "center",
+                  transition: "all 0.15s",
+                  opacity: entry ? 1 : 0.35,
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: isSelected ? 700 : 400, color: "var(--text-primary)" }}>
+                  {day}
+                </div>
+                {entry && (
+                  <div style={{ fontSize: 11, fontWeight: 700, color: priceColor, marginTop: 2 }}>
+                    ${entry.price}
+                  </div>
+                )}
+                {!entry && (
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>—</div>
+                )}
+                {entry?.direct && (
+                  <div style={{
+                    position: "absolute", top: 3, right: 3,
+                    width: 5, height: 5, borderRadius: "50%",
+                    background: "var(--success)",
+                  }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Legend */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, fontSize: 11, color: "var(--text-muted)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: "#10b981" }} />
+          <span>最便宜</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: "#f87171" }} />
+          <span>最貴</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
+          <div style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--success)" }} />
+          <span>直飛</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const navBtn: React.CSSProperties = {
+  padding: "6px 14px",
+  background: "var(--bg-secondary)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontSize: 14,
+  color: "var(--text-primary)",
+};
 
 // ── Search Content ─────────────────────────────────────────
 function SearchResultsContent() {
@@ -85,6 +305,19 @@ function SearchResultsContent() {
   const origin = (searchParams.get("origin") || "TPE").toUpperCase();
   const destination = (searchParams.get("destination") || "NRT").toUpperCase();
   const departDate = searchParams.get("departDate") || "";
+
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!origin || !destination) return;
+    setConnectionsLoading(true);
+    fetch(`${API}/api/flights/connections?origin=${origin}&destination=${destination}`)
+      .then((r) => r.json())
+      .then((d) => setConnections(d.connections || []))
+      .catch(() => setConnections([]))
+      .finally(() => setConnectionsLoading(false));
+  }, [origin, destination]);
 
   useEffect(() => {
     if (!departDate) return;
@@ -400,9 +633,27 @@ function SearchResultsContent() {
                 ))}
               </div>
             ) : (
-              /* Calendar placeholder */
-              <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
-                📅 價格日曆（即將上線，Phase 2 支援）
+              /* Calendar View */
+              <div style={{ padding: "16px 12px" }}>
+                <CalendarView
+                  origin={origin}
+                  destination={destination}
+                  departDate={departDate}
+                  onSelectDay={(d) => {
+                    setFormDepartDate(d);
+                    const params = new URLSearchParams({
+                      origin: formOrigin,
+                      destination: formDestination,
+                      departDate: d,
+                      ...(formReturnDate ? { returnDate: formReturnDate } : {}),
+                      passengers: formPassengers.toString(),
+                    });
+                    router.replace(`/search?${params.toString()}`);
+                    fetch(`${API}/api/flights/search?${params}`)
+                      .then((r) => r.json()).then((data) => setFlights(data.flights || [])).catch(() => {});
+                    setActiveTab("flights");
+                  }}
+                />
               </div>
             )}
           </div>
@@ -448,39 +699,41 @@ function SearchResultsContent() {
             )}
           </div>
 
-          {/* Hub Tips */}
+          {/* Smart Connections */}
           <div style={cardStyle}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 18 }}>🛫</span>
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
-                替代樞紐提示
+                智能中轉路線
               </span>
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
-              經主要樞紐轉機可能更便宜
-            </div>
-            {[
-              { hub: "ICN", name: "首爾仁川", savings: 2100 },
-              { hub: "HKG", name: "香港國際", savings: 1500 },
-            ].map((h) => (
-              <div key={h.hub} style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "8px 10px",
-                background: "var(--bg-secondary)",
-                borderRadius: 8,
-                marginBottom: 6,
-              }}>
-                <div>
-                  <span style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, color: "var(--accent-secondary)" }}>
-                    {h.hub}
-                  </span>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 6 }}>{h.name}</span>
+            {connectionsLoading ? (
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>分析中...</div>
+            ) : connections.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>目前無較便宜的中轉選項</div>
+            ) : (
+              connections.map((c, i) => (
+                <div key={i} style={{
+                  padding: "8px 10px",
+                  background: "var(--bg-secondary)",
+                  borderRadius: 8,
+                  marginBottom: 6,
+                  borderLeft: "3px solid var(--success)",
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", marginBottom: 3 }}>
+                    {c.breakdown}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                      直飛參考 ${c.totalPrice}
+                    </span>
+                    <span style={{ fontSize: 12, color: "var(--success)", fontWeight: 600 }}>
+                      {c.savings > 0 ? `省 $${c.savings} (${c.savingsPercent}%)` : "暂无优惠"}
+                    </span>
+                  </div>
                 </div>
-                <span style={{ fontSize: 12, color: "var(--success)", fontWeight: 600 }}>
-                  省 NT${h.savings.toLocaleString()}
-                </span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           {/* Hotel Stub */}
