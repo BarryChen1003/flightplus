@@ -188,3 +188,72 @@ export interface TPPriceLatest {
   duration: number;
   link: string;
 }
+
+// --- RefundPolicy types ---
+
+export interface AirlinePolicy {
+  airline: string;
+  airlineName: string;
+  iata: string;
+  changeFee: { domestic: number; sameDay: number; regular: number; note: string };
+  cancellationFee: { refundable: number; nonRefundable: number; noShow: number };
+  creditValidity: string;
+  upgrades: { allowed: boolean; fee: number };
+  baggage: { freeChecked: number; carryOn: number };
+  flexScore: number;
+  refundNote: string;
+}
+
+export interface RefundPolicyResult {
+  airline: string;
+  iata: string;
+  flightNumber: string;
+  route: string;
+  departDate: string;
+  policy: AirlinePolicy;
+  changeOptions: {
+    sameDayAllowed: boolean;
+    sameDayFee: number;
+    regularChangeFee: number;
+    cancellationPenalty: number;
+    refundEligible: boolean;
+    creditValidDays: number;
+  };
+  warnings: string[];
+  recommendation: string;
+  flexScore: number;
+  overallRating: 'excellent' | 'good' | 'fair' | 'poor';
+}
+
+// --- Hidden Destinations types ---
+
+export interface HiddenDestinationResult {
+  iata: string;
+  city: string;
+  country: string;
+  region: string;
+  distanceKm: number;
+  estimatedPrice: number;
+  hiddenScore: number;
+  priceTier: number;
+  touristiness: number;
+  vibe: string;
+  tagline: string;
+  tags: string[];
+  bestMonths: number[];
+  searchVolume: 'low' | 'medium' | 'high';
+  whyHidden: string;
+  openJawPotential: string;
+}
+
+export interface HiddenDestinationsResponse {
+  origin: string;
+  analyzedAt: string;
+  totalFound: number;
+  destinations: HiddenDestinationResult[];
+  meta: {
+    topValuePicks: string[];
+    offTheBeatenPath: string[];
+    seasonalGems: string[];
+  };
+}
