@@ -18,6 +18,7 @@ import { fullAnalysisRoutes } from './routes/full-analysis.js';
 import { decisionRoutes } from './routes/decision.js';
 import { calendarRoutes } from './routes/calendar.js';
 import { packageRoutes } from './routes/package.js';
+import { anomalyRoutes } from './routes/anomaly.js';
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
@@ -57,6 +58,7 @@ async function main() {
   await app.register(decisionRoutes);
   await app.register(calendarRoutes);
   await app.register(packageRoutes);
+  await app.register(anomalyRoutes);
 
   // Start
   try {
