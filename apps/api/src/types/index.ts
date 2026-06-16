@@ -297,3 +297,63 @@ export interface MultiCityResponse {
     mostExpensive: number;
   };
 }
+
+// --- Full Analysis (Strategy 7) types ---
+
+export interface FullAnalysisRequest {
+  origin: string;
+  destination: string;
+  departDate: string;
+  returnDate?: string;
+  passengers?: number;
+}
+
+export type AnalysisStatus = 'pending' | 'analyzing' | 'ready' | 'error';
+
+export interface ScoredOption {
+  type: 'direct' | 'connection' | 'nearby_airport' | 'hidden_dest' | 'multi_city';
+  label: string;
+  flights: FlightOption[];
+  totalPrice: number;
+  currency: string;
+  totalDuration: number;
+  totalStops: number;
+  // Normalized scores (0-100, higher = better)
+  priceScore: number;
+  convenienceScore: number; // stops + duration
+  flexScore: number;
+  overallScore: number;
+  whyGood: string;
+  affiliateUrl: string;
+}
+
+export interface FullAnalysisResult {
+  id: string;
+  origin: string;
+  destination: string;
+  departDate: string;
+  returnDate?: string;
+  passengers: number;
+  analyzedAt: string;
+  status: AnalysisStatus;
+  // All options found
+  options: ScoredOption[];
+  // Winner
+  winner: ScoredOption | null;
+  // Quick summary
+  summary: {
+    totalOptionsFound: number;
+    cheapestPrice: number;
+    fastestOption: ScoredOption | null;
+    mostFlexible: ScoredOption | null;
+    bestValue: ScoredOption | null; // balance of price + convenience
+  };
+  // Strategy breakdown
+  strategyResults: {
+    directFlights: number;
+    connections: number;
+    nearbyAirports: number;
+    hiddenDestinations: number;
+    multiCityCombos: number;
+  };
+}
