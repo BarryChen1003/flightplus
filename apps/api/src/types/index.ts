@@ -257,3 +257,43 @@ export interface HiddenDestinationsResponse {
     seasonalGems: string[];
   };
 }
+
+// --- Multi-city (Strategy 4) types ---
+
+export interface MultiCityLeg {
+  origin: string;
+  destination: string;
+  date: string; // YYYY-MM-DD
+}
+
+export interface MultiCityItinerary {
+  legs: MultiCityLegResult[];
+  totalPrice: number;
+  currency: string;
+  totalDuration: number; // minutes, sum of all legs
+  totalStops: number;
+  savingsVsDirect: number; // TWD, how much saved vs booking separately
+  affiliateUrl: string;
+}
+
+export interface MultiCityLegResult {
+  legIndex: number;
+  origin: string;
+  destination: string;
+  date: string;
+  flights: FlightOption[]; // top results for this leg
+  cheapestPrice: number;
+  cheapestFlight: FlightOption;
+}
+
+export interface MultiCityResponse {
+  legs: MultiCityLeg[];
+  itineraries: MultiCityItinerary[];
+  meta: {
+    totalLegs: number;
+    itinerariesFound: number;
+    priceRange: { min: number; max: number };
+    cheapestTotal: number;
+    mostExpensive: number;
+  };
+}

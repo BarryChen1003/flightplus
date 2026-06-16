@@ -13,6 +13,7 @@ import { promotionRoutes } from './routes/promotions.js';
 import { feeRoutes } from './routes/fees.js';
 import { refundPolicyRoutes } from './routes/refund-policy.js';
 import { hiddenDestinationRoutes } from './routes/hidden-destinations.js';
+import { multiCityRoutes } from './routes/multi-city.js';
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
@@ -47,6 +48,7 @@ async function main() {
   await app.register(feeRoutes);
   await app.register(refundPolicyRoutes);
   await app.register(hiddenDestinationRoutes);
+  await app.register(multiCityRoutes);
 
   // Start
   try {
