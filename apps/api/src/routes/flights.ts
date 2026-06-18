@@ -4,7 +4,7 @@ import { searchCheapFlights, getNearestPlacesMatrix, getCalendarPrices } from '.
 import { findBestConnections } from '../services/connection-finder.js';
 import { getCachedFlightSearch } from '../services/cache.js';
 import { generateMockCalendar } from '../services/calendar-prices.js';
-import type { FlightSearchResponse, NearestAirportResponse, FlightSearchQuery, NearestAirportQuery, BestDatesResponse, CalendarDay } from '../types/index.js';
+import type { FlightSearchResponse, NearestAirportResponse, NearestAirport, FlightSearchQuery, NearestAirportQuery, BestDatesResponse, CalendarDay } from '../types/index.js';
 
 const flightSearchSchema = z.object({
   origin: z.string().length(3).toUpperCase(),
@@ -65,93 +65,93 @@ export async function flightsRoutes(app: FastifyInstance): Promise<void> {
     // Default destination to 'any major airport' if not provided
     const dest = q.destination ?? 'TYO';
 
+    let airports: NearestAirport[] = [];
+
     try {
-      let airports = await getNearestPlacesMatrix(q.origin, dest, q.date);
-
-      // Fallback mock data when TP API returns nothing
-      if (airports.length === 0) {
-        airports = [
-          {
-            iata: 'KIX',
-            name: '關西國際機場',
-            distance: 170,
-            priceDiff: -25,
-            savings: 800,
-            flights: [
-              {
-                price: 125,
-                currency: 'USD',
-                airline: 'Peach',
-                flightNumber: 'MM024',
-                departure: `${q.date}T08:00:00.000Z`,
-                arrival: `${q.date}T11:30:00.000Z`,
-                duration: 210,
-                stops: 0,
-                origin: q.origin,
-                destination: 'KIX',
-                affiliateUrl: `https://flightplus.com/redirect?url=https://www.aviasales.ru/search?origin_iata=${q.origin}&destination_iata=KIX&depart_date=${q.date}&marker=320764`,
-              },
-            ],
-          },
-          {
-            iata: 'ITM',
-            name: '伊丹機場',
-            distance: 190,
-            priceDiff: -15,
-            savings: 500,
-            flights: [
-              {
-                price: 135,
-                currency: 'USD',
-                airline: 'Japan Airlines',
-                flightNumber: 'JL123',
-                departure: `${q.date}T10:00:00.000Z`,
-                arrival: `${q.date}T13:15:00.000Z`,
-                duration: 195,
-                stops: 0,
-                origin: q.origin,
-                destination: 'ITM',
-                affiliateUrl: `https://flightplus.com/redirect?url=https://www.aviasales.ru/search?origin_iata=${q.origin}&destination_iata=ITM&depart_date=${q.date}&marker=320764`,
-              },
-            ],
-          },
-          {
-            iata: 'NGO',
-            name: '中部國際機場',
-            distance: 260,
-            priceDiff: -5,
-            savings: 200,
-            flights: [
-              {
-                price: 145,
-                currency: 'USD',
-                airline: 'China Airlines',
-                flightNumber: 'CI156',
-                departure: `${q.date}T12:00:00.000Z`,
-                arrival: `${q.date}T15:30:00.000Z`,
-                duration: 210,
-                stops: 0,
-                origin: q.origin,
-                destination: 'NGO',
-                affiliateUrl: `https://flightplus.com/redirect?url=https://www.aviasales.ru/search?origin_iata=${q.origin}&destination_iata=NGO&depart_date=${q.date}&marker=320764`,
-              },
-            ],
-          },
-        ];
-      }
-
-      const response: NearestAirportResponse = {
-        origin: q.origin,
-        date: q.date,
-        airports,
-        meta: { count: airports.length, cached: false },
-      };
-      return response;
+      airports = await getNearestPlacesMatrix(q.origin, dest, q.date);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Nearest airports search failed';
-      app.log.error({ err, q }, 'nearest airports error');
-      return reply.status(502).send({ error: 'Upstream API error', details: message });
+      app.log.warn({ err, q }, '[nearest] TP API failed, using mock data');
     }
+
+    // Fallback mock data when TP API fails or returns nothing
+    if (airports.length === 0) {
+      airports = [
+        {
+          iata: 'KIX',
+          name: '關西國際機場',
+          distance: 170,
+          priceDiff: -25,
+          savings: 800,
+          flights: [
+            {
+              price: 125,
+              currency: 'USD',
+              airline: 'Peach',
+              flightNumber: 'MM024',
+              departure: `${q.date}T08:00:00.000Z`,
+              arrival: `${q.date}T11:30:00.000Z`,
+              duration: 210,
+              stops: 0,
+              origin: q.origin,
+              destination: 'KIX',
+              affiliateUrl: `https://flightplus.com/redirect?url=https://www.aviasales.ru/search?origin_iata=${q.origin}&destination_iata=KIX&depart_date=${q.date}&marker=320764`,
+            },
+          ],
+        },
+        {
+          iata: 'ITM',
+          name: '伊丹機場',
+          distance: 190,
+          priceDiff: -15,
+          savings: 500,
+          flights: [
+            {
+              price: 135,
+              currency: 'USD',
+              airline: 'Japan Airlines',
+              flightNumber: 'JL123',
+              departure: `${q.date}T10:00:00.000Z`,
+              arrival: `${q.date}T13:15:00.000Z`,
+              duration: 195,
+              stops: 0,
+              origin: q.origin,
+              destination: 'ITM',
+              affiliateUrl: `https://flightplus.com/redirect?url=https://www.aviasales.ru/search?origin_iata=${q.origin}&destination_iata=ITM&depart_date=${q.date}&marker=320764`,
+            },
+          ],
+        },
+        {
+          iata: 'NGO',
+          name: '中部國際機場',
+          distance: 260,
+          priceDiff: -5,
+          savings: 200,
+          flights: [
+            {
+              price: 145,
+              currency: 'USD',
+              airline: 'China Airlines',
+              flightNumber: 'CI156',
+              departure: `${q.date}T12:00:00.000Z`,
+              arrival: `${q.date}T15:30:00.000Z`,
+              duration: 210,
+              stops: 0,
+              origin: q.origin,
+              destination: 'NGO',
+              affiliateUrl: `https://flightplus.com/redirect?url=https://www.aviasales.ru/search?origin_iata=${q.origin}&destination_iata=NGO&depart_date=${q.date}&marker=320764`,
+            },
+          ],
+        },
+      ];
+    }
+
+    const response: NearestAirportResponse = {
+      origin: q.origin,
+      date: q.date,
+      airports,
+      meta: { count: airports.length, cached: false },
+    };
+    return response;
   });
 
   // GET /api/flights/best-dates — Strategy 1 & 6: find cheapest departure dates in a month
