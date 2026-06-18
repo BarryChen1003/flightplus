@@ -8,8 +8,8 @@ services:
     env: python
     region: singapore
     plan: free          # Free tier: 512MB RAM, shared CPU
-    buildCommand: cd apps/worker && pip install -r requirements.txt && pip install upstash-redis
-    startCommand: cd apps/worker && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8001}
+    buildCommand: cd apps/worker && poetry install
+    startCommand: cd apps/worker && poetry run uvicorn main:app --host 0.0.0.0 --port 8001
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
