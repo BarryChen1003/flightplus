@@ -48,8 +48,11 @@ export async function flightsRoutes(app: FastifyInstance): Promise<void> {
 
       return response;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Flight search failed';
-      app.log.error({ err, q }, 'flight search error');
+      const errObj = err instanceof Error ? err : new Error(String(err));
+      const message = typeof errObj.message === 'string' && errObj.message !== '[object Object]'
+        ? errObj.message
+        : 'Flight search failed';
+      app.log.error({ err: errObj, q }, 'flight search error');
       return reply.status(502).send({ error: 'Upstream API error', details: message });
     }
   });
