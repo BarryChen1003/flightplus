@@ -5,7 +5,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import AirportSelector from "../../components/AirportSelector";
 
-const API = "https://flightplus-api.onrender.com";
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // ── Types ────────────────────────────────────────────────
 interface Flight {
