@@ -1,10 +1,10 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { searchCheapFlights, getNearestPlacesMatrix, getCalendarPrices } from '../services/travelpayouts.js';
+import { searchCheapFlights, getNearestPlacesMatrix, getCalendarPrices, searchLatestPrices } from '../services/travelpayouts.js';
 import { findBestConnections } from '../services/connection-finder.js';
 import { getCachedFlightSearch } from '../services/cache.js';
 import { generateMockCalendar } from '../services/calendar-prices.js';
-import type { FlightSearchResponse, NearestAirportResponse, NearestAirport, FlightSearchQuery, NearestAirportQuery, BestDatesResponse, CalendarDay } from '../types/index.js';
+import type { FlightSearchResponse, NearestAirportResponse, NearestAirport, FlightSearchQuery, NearestAirportQuery, BestDatesResponse, CalendarDay, FlightOption } from '../types/index.js';
 
 const flightSearchSchema = z.object({
   origin: z.string().length(3).toUpperCase(),
@@ -13,6 +13,10 @@ const flightSearchSchema = z.object({
   returnDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   passengers: z.coerce.number().int().min(1).max(9).optional().default(1),
   currency: z.string().optional().default('USD'),
+  sortBy: z.enum(['price', 'route', 'distance_unit_price']).optional().default('price'),
+  limit: z.coerce.number().int().min(1).max(1000).optional().default(30),
+  periodType: z.enum(['year', 'month']).optional().default('month'),
+  apiVersion: z.enum(['v1', 'v2']).optional().default('v1'),
 });
 
 const nearestAirportSchema = z.object({
@@ -34,7 +38,23 @@ export async function flightsRoutes(app: FastifyInstance): Promise<void> {
     const q = parsed.data as FlightSearchQuery;
 
     try {
-      const flights = await searchCheapFlights(q.origin, q.destination, q.departDate);
+      // Use v2 API when sortBy/limit params indicate user wants enhanced search
+      const useV2 = q.apiVersion === 'v2' || q.sortBy !== 'price' || q.limit !== 30;
+      let flights: FlightOption[];
+
+      if (useV2) {
+        flights = await searchLatestPrices(q.origin, q.destination, q.departDate, {
+          origin: q.origin,
+          destination: q.destination,
+          sorting: q.sortBy,
+          limit: q.limit,
+          periodType: q.periodType,
+          currency: q.currency,
+        });
+      } else {
+        flights = await searchCheapFlights(q.origin, q.destination, q.departDate);
+      }
+
       const response: FlightSearchResponse = {
         flights,
         meta: { count: flights.length, cached: false },

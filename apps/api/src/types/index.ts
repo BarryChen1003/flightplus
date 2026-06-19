@@ -91,6 +91,10 @@ export interface FlightSearchQuery {
   returnDate?: string;
   passengers?: number;
   currency?: string;
+  sortBy?: 'price' | 'route' | 'distance_unit_price';
+  limit?: number;      // 1-1000
+  periodType?: 'year' | 'month';
+  apiVersion?: 'v1' | 'v2';
 }
 
 export interface HotelSearchQuery {

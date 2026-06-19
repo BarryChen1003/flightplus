@@ -156,7 +156,7 @@ export async function searchCheapFlights(
   let tpData: TPDataResponse;
   try {
     const res = await http.get<TPDataResponse>('/v1/prices/cheap', {
-      params: { origin, destination, depart_date: departDate.slice(0, 7), currency: USD, page: 1, limit: 30 },
+      params: { origin, destination: '-', depart_date: departDate.slice(0, 7), currency: USD, page: 1, limit: 30 },
     });
     tpData = res.data;
   } catch (err) {
@@ -348,4 +348,117 @@ export async function getCalendarPrices(
   }
 
   return { dates };
+}
+
+// --- v2 Prices Latest (next sprint: better than v1/cheap) ---
+// Ref: https://travelpayouts-data-api.readthedocs.io/en/latest/#2-latest-ticket-prices
+
+interface TPLatestPrice {
+  origin: string;
+  destination: string;
+  trip_class: number;
+  depart_date: string;
+  return_date: string;
+  number_of_changes: number;
+  value: number;
+  found_at: string;
+  distance: number;
+  actual: boolean;
+}
+
+interface TPLatestResponse {
+  success: boolean;
+  data: TPLatestPrice[];
+  error: string | null;
+}
+
+export type SortOption = 'price' | 'route' | 'distance_unit_price';
+
+export interface LatestSearchOptions {
+  origin: string;
+  destination: string;
+  periodType?: 'year' | 'month';
+  beginningOfPeriod?: string; // YYYY-MM-DD
+  oneWay?: boolean;
+  limit?: number; // max 1000, default 30
+  sorting?: SortOption;
+  tripDuration?: number; // length of stay
+  currency?: string;
+}
+
+/**
+ * Uses TP v2 `/v2/prices/latest` — returns prices found in last 48h.
+ * Supports sorting (price/route/distance_unit_price), larger limits (up to 1000),
+ * and filtering by trip duration. Better than v1/cheap for route-specific searches.
+ */
+export async function searchLatestPrices(
+  origin: string,
+  destination: string,
+  departDate: string,
+  options?: LatestSearchOptions
+): Promise<FlightOption[]> {
+  const limit = Math.min(options?.limit ?? 30, 1000);
+  const periodType = options?.periodType ?? 'month';
+  const beginningOfPeriod = options?.beginningOfPeriod ?? departDate;
+
+  let tpData: TPLatestResponse;
+  try {
+    const res = await http.get<TPLatestResponse>('/v2/prices/latest', {
+      params: {
+        origin,
+        destination,
+        period_type: periodType,
+        beginning_of_period: beginningOfPeriod,
+        one_way: options?.oneWay ?? true,
+        limit,
+        sorting: options?.sorting ?? 'price',
+        trip_duration: options?.tripDuration,
+        currency: options?.currency ?? USD,
+      },
+    });
+    tpData = res.data;
+  } catch (err) {
+    console.warn(`[TP v2/latest] API unreachable: ${err instanceof Error ? err.message : err}`);
+    // Fallback to mock
+    const mock = buildMockFlights(origin, destination, departDate);
+    await setCachedFlightSearch(origin, destination, departDate, { _cachedResult: mock });
+    return mock;
+  }
+
+  if (!tpData.success || !tpData.data?.length) {
+    const mock = buildMockFlights(origin, destination, departDate);
+    await setCachedFlightSearch(origin, destination, departDate, { _cachedResult: mock });
+    return mock;
+  }
+
+  const airlines = await getAirlines();
+  const results: FlightOption[] = [];
+
+  for (const p of tpData.data) {
+    const code = ''; // v2/latest doesn't provide airline code
+    const stops = p.number_of_changes ?? 0;
+    const departDt = new Date(p.depart_date);
+    const durationMin = Math.round((p.distance ?? 500) / 12); // rough estimate
+
+    results.push({
+      price: p.value,
+      currency: options?.currency ?? USD,
+      airline: airlineName(code, airlines),
+      flightNumber: '—',
+      departure: departDt.toISOString(),
+      arrival: p.return_date
+        ? new Date(p.return_date).toISOString()
+        : estimateArrival(departDate, stops),
+      duration: durationMin,
+      stops,
+      origin: p.origin,
+      destination: p.destination,
+      affiliateUrl: buildAffiliateUrl(
+        `https://www.aviasales.ru/search?origin_iata=${p.origin}&destination_iata=${p.destination}&depart_date=${p.depart_date.slice(0, 7)}`
+      ),
+    });
+  }
+
+  await setCachedFlightSearch(origin, destination, departDate, { _cachedResult: results });
+  return results;
 }
