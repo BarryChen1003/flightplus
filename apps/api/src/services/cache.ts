@@ -59,7 +59,9 @@ async function cacheGet(key: string): Promise<string | null> {
   if (client) {
     try {
       const val = await client.get<string>(key);
-      return val ?? null;
+      // Guard against Upstash returning non-string (e.g. deserialized object)
+      if (typeof val !== 'string') return null;
+      return val;
     } catch (e) {
       console.warn('[cache] Redis GET failed, falling back to memory:', e);
     }
